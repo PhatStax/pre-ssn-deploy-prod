@@ -1,0 +1,17 @@
+/**
+ * Created by asuarez on 12/15/2016.
+ */
+
+@Istest
+public with sharing class ABT_Patient_Fake implements ABT_Services.Patient {
+
+  public Integer addPayor(Integer brightreePatientId, Integer brightreePayorId, String level, String policynumber) {
+    ATU_Callout_Fake.makeCallNTimes(1);
+    return Math.round(Math.random()*1000);
+  }
+
+  public Integer Create(ABT_Services.CreatePatientArgs args){
+    ATU_Callout_Fake.makeCallNTimes(2);
+    return Math.round(Math.random()*1000);
+  }
+}

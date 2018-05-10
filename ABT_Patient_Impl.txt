@@ -1,0 +1,122 @@
+/**
+ * Created by asuarez on 12/6/2016.
+ */
+
+public with sharing class ABT_Patient_Impl implements ABT_Services.Patient {
+  private static final Integer BRIGHTREE_CUSTOM_FIELD_CONTACT_ID = 1;
+  private final String endpoint;
+
+  public ABT_Patient_Impl(String endpoint){
+    this.endpoint = endpoint;
+  }
+
+  public Integer addPayor(Integer brightreePatientId, Integer brightreePayorId, String level, String policynumber){
+    WSDL_Brightree_Patient_g.BasicHttpBinding_IPatientService basic = new WSDL_Brightree_Patient_g.BasicHttpBinding_IPatientService(endpoint);
+    WSDL_Brightree_Patient_g.PatientPayor patientPay                = new WSDL_Brightree_Patient_g.PatientPayor();
+    WSDL_Brightree_Patient_g.PatientPolicy ppolicy                  = new WSDL_Brightree_Patient_g.PatientPolicy();
+    patientPay.payorLevel = level;
+    patientPay.PatientKey = brightreePatientId;
+    patientPay.PayorKey = brightreePayorId;
+    ppolicy.PolicyNumber = policynumber;
+    ppolicy.StartDate = System.Now();
+    ppolicy.Relationship = 'Self';
+    patientPay.Policy = ppolicy;
+    WSDL_Brightree_Patient_g.DataWriteServiceResponse response = basic.PatientPayorAdd(brightreePatientId, brightreePayorId, patientPay);
+    if (!response.Success) throw ABT_Exception_Factory.newBrightreeServerExceptionByMsgs(response.Messages.string_x);
+    return response.UpdatedDataKey;
+  }
+
+  public Integer create(ABT_Services.CreatePatientArgs args){
+    WSDL_Brightree_Patient_g.BasicHttpBinding_IPatientService basic = new WSDL_Brightree_Patient_g.BasicHttpBinding_IPatientService(endpoint);
+    WSDL_Brightree_Patient_g.Patient params = new WSDL_Brightree_Patient_g.Patient();
+    params.PatientClinicalInfo = new WSDL_Brightree_Patient_g.PatientClinicalInfo();
+    params.PatientInsuranceInfo = new WSDL_Brightree_Patient_g.PatientInsuranceInfo();
+    params.PatientClinicalInfo.Gender = args.gender;
+    params.PatientGeneralInfo = new WSDL_Brightree_Patient_g.PatientGeneralInfo();
+    params.PatientGeneralInfo.Name = new WSDL_Brightree_Patient_g.Name();
+    params.PatientGeneralInfo.Name.First = args.firstName;
+    params.PatientGeneralInfo.Name.Last = args.lastName;
+    params.PatientGeneralInfo.SSN = args.ssn;
+    params.PatientGeneralInfo.CustomerType = 'Patient';
+    params.PatientGeneralInfo.DeliveryPhone = args.phone;
+    params.PatientGeneralInfo.BirthDate = args.birthdate;
+    params.PatientGeneralInfo.AccountNumber = args.accountNumber;
+    params.PatientGeneralInfo.BillingAddress = new WSDL_Brightree_Patient_g.Address();
+    params.PatientGeneralInfo.BillingAddress.AddressLine1 = args.address;
+    params.PatientGeneralInfo.BillingAddress.City = args.city;
+    params.PatientGeneralInfo.BillingAddress.State = args.state;
+    params.PatientGeneralInfo.BillingAddress.Country = args.country;
+    params.PatientGeneralInfo.BillingAddress.PostalCode = args.postalCode;
+    params.PatientGeneralInfo.DeliveryAddress = new WSDL_Brightree_Patient_g.Address();
+    params.PatientGeneralInfo.DeliveryAddress.AddressLine1 = args.shipAddress;
+    params.PatientGeneralInfo.DeliveryAddress.City = args.shipCity;
+    params.PatientGeneralInfo.DeliveryAddress.State = args.shipState;
+    params.PatientGeneralInfo.DeliveryAddress.Country = args.shipCountry;
+    params.PatientGeneralInfo.DeliveryAddress.PostalCode = args.shipPostalCode;
+    params.PatientGeneralInfo.BillingContactInfo = new WSDL_Brightree_Patient_g.ContactInfo();
+    params.PatientGeneralInfo.BillingContactInfo.EmailAddress = args.email;
+    params.PatientGeneralInfo.BillingContactInfo.PhoneNumber = args.phone;
+    params.PatientGeneralInfo.BillingContactInfo.MobilePhoneNumber = args.mobile;
+    params.PatientGeneralInfo.Branch = new WSDL_Brightree_Patient_g.LookupValue();
+    params.PatientGeneralInfo.Branch.Value = args.branchName;
+    params.PatientGeneralInfo.Branch.ID = args.branchID;
+//        FIXME ask for Emergency contact
+//        params.PatientGeneralInfo.EmergencyContact = new WSDL_Brightree_Patient_g.PatientContact();
+//        params.PatientGeneralInfo.EmergencyContact.EmailAddress = args.email;
+//        params.PatientGeneralInfo.EmergencyContact.PhoneNumber = args.phone;
+//        params.PatientGeneralInfo.EmergencyContact.Name = new WSDL_Brightree_Patient_g.Name();
+//        params.PatientGeneralInfo.EmergencyContact.Name.First = args.firstName;
+//        params.PatientGeneralInfo.EmergencyContact.Name.Last = args.lastName;
+    params.PatientGeneralInfo.PlaceOfService = new WSDL_Brightree_Patient_g.LookupValue();
+    params.PatientGeneralInfo.PlaceOfService.ID = 4;
+    params.PatientGeneralInfo.PlaceOfService.Value = '12-Home';
+    params.PatientGeneralInfo.ResponsiblePartyContact = new WSDL_Brightree_Patient_g.ResponsibleParty();
+    params.PatientGeneralInfo.ResponsiblePartyContact.Address = params.PatientGeneralInfo.BillingAddress;
+    params.PatientGeneralInfo.ResponsiblePartyContact.EmailAddress = args.email;
+    params.PatientGeneralInfo.ResponsiblePartyContact.PhoneNumber = args.phone;
+    params.PatientGeneralInfo.ResponsiblePartyContact.Name = new WSDL_Brightree_Patient_g.Name();
+    params.PatientGeneralInfo.ResponsiblePartyContact.Name.First = args.firstName;
+    params.PatientGeneralInfo.ResponsiblePartyContact.Name.Last = args.lastName;
+    params.PatientGeneralInfo.SecurityGroup = new WSDL_Brightree_Patient_g.LookupValue();
+    params.PatientGeneralInfo.SecurityGroup.ID = 1;
+    params.PatientGeneralInfo.SecurityGroup.Value = 'default';
+    if (args.marketingRepId == null) {
+      params.PatientClinicalInfo.MarketingRep = new WSDL_Brightree_Patient_g.LookupValue();
+      params.PatientClinicalInfo.MarketingRep.ID = args.marketingRepId;
+    }
+    basic.timeout_x = 20000;
+    WSDL_Brightree_Patient_g.DataWriteServiceResponse response = basic.PatientCreate(params);
+    if (!response.Success) {
+      String[] errorMsgs = response.Messages.string_x;
+      errorMsgs.add(JSON.serializePretty(params));
+      throw ABT_Exception_Factory.newBrightreeServerExceptionByMsgs(response.Messages.string_x);
+    }
+    return response.UpdatedDataKey;
+  }
+/*
+  private ABT_Services.SearchPatientResult parseSearchResponse(WSDL_Brightree_Patient_g.DataSearchServiceResponseUsingPatientSearchResponse response, Exception notFoundException){
+    if(!response.Success){
+      throw ABT_Exception_Factory.newBrightreeServerExceptionByMsgs(response.Messages.string_x);
+    }
+    if(response.TotalItemCount == 0 || response.Items.PatientSearchResponse.size() == 0){
+      throw notFoundException;
+    }
+    WSDL_Brightree_Patient_g.PatientSearchResponse patient = response.Items.PatientSearchResponse.get(0);
+    ABT_Services.SearchPatientResult result = new ABT_Services.SearchPatientResult();
+    result.brightreeId = patient.BrightreeID;
+    result.accountNumber = patient.AccountNumber;
+    result.address = patient.DeliveryAddress.AddressLine1 + patient.DeliveryAddress.AddressLine2 + patient.DeliveryAddress.AddressLine3;
+    result.city = patient.DeliveryAddress.City;
+    result.country = patient.DeliveryAddress.Country;
+    result.postalCode = patient.DeliveryAddress.PostalCode;
+    result.phone = patient.DeliveryPhone;
+    result.firstName = patient.FirstName;
+    result.lastName = patient.LastName;
+    result.created = patient.CreateDate;
+    result.death = patient.DateOfDeath;
+    result.ssn = patient.SSN;
+    result.birthdate = patient.BirthDate;
+
+    return result;
+  }*/
+}

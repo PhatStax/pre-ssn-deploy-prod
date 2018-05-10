@@ -1,0 +1,187 @@
+/**
+ * Created by asuarez on 12/6/2016.
+ */
+
+public class ABT_Services {
+
+  private static final String SYSTEM_ID = 'ABT';
+
+  //***************************************
+  // INTERFACES
+  //***************************************
+
+  public interface Patient {
+  //  ABT_Services.SearchPatientResult searchByBrightreeId(Integer brightreeId);
+  //  ABT_Services.SearchPatientResult searchByContactId(String contactId);
+    Integer addPayor(Integer brightreePatientId, Integer brightreePayorId, String level, String policynumber);
+    Integer Create(ABT_Services.CreatePatientArgs args);
+  }
+
+  public interface SaleOrder{
+    Integer Create(ABT_Services.CreateSaleOrderArgs args);
+    Integer addItem(ABT_Services.AddItemSaleOrderArgs args);
+    void cancel(Integer brightreeId);
+  }
+
+  public interface CustomField {
+    void SaveSaleOrderFieldsByBrightreeId(Integer brightreeId, ABT_Services.SaveCustomFieldSaleOrderArgs args);
+    void SavePatientFieldsByBrightreeId(Integer brightreeId, ABT_Services.SaveCustomFieldPatientArgs args);
+  }
+
+  public interface Invoice{
+    List<ABT_Services.PatientOpenInvoiceAgedBalanceResult> searchActiveByBrightreePatientId(Integer brightreeId);
+  }
+
+  public interface Insurance {
+//    List<ObjPayor> getPayors(Integer pageSize, Integer pageNumber);
+  }
+
+  //***************************************
+  // CUSTOM EXCEPTIONS
+  //***************************************
+
+  public class TooManyRecordsToProcessException extends Exception{}
+  public class PatientNotFoundException extends Exception{}
+  public class InvoiceNotFoundException extends Exception{}
+  public class RemoteException extends Exception{}
+
+  //***************************************
+  // OBJECT CLASSES
+  //***************************************
+
+  public class SearchPatientResult{
+    public String firstName;
+    public String lastName;
+    public Integer brightreeId;
+    public Datetime birthdate;
+    public String accountNumber;
+    public Datetime created;
+    public String ssn;
+    public String address;
+    public String city;
+    public String country;
+    public String state;
+    public String postalCode;
+    public String phone;
+    public Datetime death;
+  }
+
+  public class CreatePatientArgs{
+    public String firstName;
+    public String lastName;
+    public Datetime birthdate;
+    public String accountNumber;
+    public String sdfcId;
+    public String ssn;
+    public String address;
+    public String city;
+    public String country;
+    public String state;
+    public String postalCode;
+    public String marketingRep;
+    public Integer marketingRepId;
+    public String shipAddress;
+    public String shipCity;
+    public String shipCountry;
+    public String shipState;
+    public String shipPostalCode;
+    public String mobile;
+    public String phone;
+    public String email;
+    public String gender;
+    public Integer branchID;
+    public String branchName;
+    public String doctorFirstName;
+    public String doctorLastName;
+    public String doctorNPI;
+    public String doctorFax;
+    public CreatePatientPayorArgs[] policies = new List<CreatePatientPayorArgs>();
+  }
+
+  public class CreatePatientPayorArgs{
+    public String patientKey;
+    public String payorKey;
+    public String policyNumber;
+    public String payorAddressLine1;
+    public String payorAddressLine2;
+    public String payorAddressLine3;
+    public String payorCity;
+    public String payorCountry;
+    public String payorCounty;
+    public String payorPostalCode;
+    public String payorState;
+    public String payorPhone;
+    public String patientPayorKey;
+    public String policyContact;
+    public String policyHolder;
+    public String payPercent;
+    public String payorLevel;
+    public String effectiveDate;
+    public String effectiveEndDate;
+    public String payorFax;
+    public String groupNumber;
+    public String deductible;
+    public String employer;
+    public String employerContact;
+    public Boolean verified;
+  }
+
+  public class CreateSaleOrderArgs{
+    public String address;
+    public String city;
+    public String state;
+    public String country;
+    public String postalCode;
+    public String email;
+    public String phone;
+    public String deliveryNote;
+    public String shippingMethod;
+    public Integer patientBrightreeId;
+    public Integer branchId;
+    public String marketingRep;
+  }
+
+  public class SaveCustomFieldSaleOrderArgs{
+    public String opportunityId;
+    public String orderTypeId;
+    public String shippingmethod;
+  }
+
+  public class SaveCustomFieldPatientArgs{
+    public String accountId;
+    public String channel;
+  }
+
+  public class AddItemSaleOrderArgs{
+    public Integer brightreeId;
+    public String item;
+    public Integer quantity;
+  }
+
+  public interface PatientOpenInvoiceAgedBalanceResult {
+    Decimal getAdjustedAmount();
+    Decimal getAllowAmount();
+    Decimal getBalanceAmountTotal();
+    Decimal getBalanceAmountOver30();
+    Decimal getBalanceAmountOwning();
+    Decimal getChargeAmount();
+    String getPayorName();
+    Decimal getPaymentAmount();
+    Decimal getTaxAmount();
+  }
+
+  public interface ObjPayor{
+    String getInsuranceName();
+    String getInsuranceId();
+    String getAddress();
+    Integer getBrightreeId();
+  }
+
+  public interface ObjPolicy {
+    Integer getPayorId();
+    String getPayorLevel();
+    String getPolicyNumber();
+    String getGroupNumber();
+  }
+
+}

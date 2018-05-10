@@ -1,0 +1,76 @@
+/**
+ * Created by asuarez on 12/7/2016.
+ */
+
+@IsTest
+private class ABT_Patient_Impl_Test {
+
+  @IsTest
+  static void testPatientCreateRemoteFailure () {
+    WSDL_Brightree_Patient_g.PatientCreateResponse_element fakeResp = new WSDL_Brightree_Patient_g.PatientCreateResponse_element ();
+    fakeResp.PatientCreateResult = new WSDL_Brightree_Patient_g.DataWriteServiceResponse ();
+    fakeResp.PatientCreateResult.Success = false;
+    fakeResp.PatientCreateResult.Messages = new WSDL_Brightree_Patient_g.ArrayOfstring ();
+    fakeResp.PatientCreateResult.Messages.string_x = new List<String>{
+            'hello', 'world'
+    };
+    Test.setMock(WebServiceMock.class, new ATU_FakeResponseService (fakeResp));
+
+    ABT_Services.Patient patientService = ABT_Factory.CreatePatientService();
+    try {
+      patientService.Create(newCreatePatientArgs());
+    } catch (ABT_Services.RemoteException ex) {
+      System.assert(ex.getMessage().contains('hello'), 'remote message not included');
+      System.assert(ex.getMessage().contains('world'), 'remote message not included');
+      return;
+    }
+    System.assert(false, 'ABT_Services.RemoteException expected');
+  }
+
+  @IsTest
+  static void testPayorCreateRemoteFailure () {
+    WSDL_Brightree_Patient_g.PatientPayorAddResponse_element fakeResp = new WSDL_Brightree_Patient_g.PatientPayorAddResponse_element ();
+    fakeResp.PatientPayorAddResult = new WSDL_Brightree_Patient_g.DataWriteServiceResponse ();
+    fakeResp.PatientPayorAddResult.Success = false;
+    fakeResp.PatientPayorAddResult.Messages = new WSDL_Brightree_Patient_g.ArrayOfstring ();
+    fakeResp.PatientPayorAddResult.Messages.string_x = new List<String>{
+            'hello', 'world'
+    };
+    Test.setMock(WebServiceMock.class, new ATU_FakeResponseService (fakeResp));
+
+    ABT_Services.Patient patientService = ABT_Factory.CreatePatientService();
+    try {
+      patientService.addPayor(1,1,'Primary', '11111');
+    } catch (ABT_Services.RemoteException ex) {
+      System.assert(ex.getMessage().contains('hello'), 'remote message not included');
+      System.assert(ex.getMessage().contains('world'), 'remote message not included');
+      return;
+    }
+    System.assert(false, 'ABT_Services.RemoteException expected');
+  }
+
+  @TestVisible
+  private static ABT_Services.CreatePatientArgs newCreatePatientArgs () {
+    ABT_Services.CreatePatientArgs args = new ABT_Services.CreatePatientArgs ();
+    args.accountNumber = '123';
+    args.birthdate = Datetime.newInstance(1990, 10, 20);
+    args.address = 'Royal Oak';
+    args.city = 'Calgary';
+    args.state = 'Alberta';
+    args.country = 'Canada';
+    args.postalCode = '12345';
+    args.shipAddress = 'Royal Oak';
+    args.shipCity = 'Calgary';
+    args.shipState = 'Alberta';
+    args.shipCountry = 'Canada';
+    args.shipPostalCode = '12345';
+    args.firstName = 'Gregory';
+    args.lastName = 'House';
+    args.gender = 'Male';
+    args.phone = '5555555555';
+    args.email = 'abc@company.com';
+    args.branchId = 107;
+
+    return args;
+  }
+}

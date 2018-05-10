@@ -1,0 +1,332 @@
+/**
+ * Created by aneshmistry on 2017-03-18.
+ */
+
+global class INO_Managers_BTSalesOrder {
+
+  private static final String CLASS_NAME = 'INO_Managers_BTSalesOrder.';
+
+  @future(callout=true)
+  public static void asyncCreateSaleOrder (List<Id> opportunitiesIds) {
+    AU_Debugger.enterFunction(CLASS_NAME + 'asyncCreateSaleOrder:, received opportunities:' + opportunitiesIds);
+    AU_Check.NotNull(opportunitiesIds, CLASS_NAME + 'asyncCreateSaleOrder:opportunitiesIds');
+    List<Error> errors = new List<Error> ();
+    AU_UnitofWork uow = new AU_UnitofWork (new Schema.SObjectType[]{
+            Account.SObjectType,
+            Opportunity.SObjectType,
+            OpportunityLineItem.SObjectType
+    });
+
+    List<Account> accounts = [
+            SELECT
+                    Brightree_Account_Id__c,
+                    Branch__c,
+                    RecordTypeId,
+                    BillingStreet,
+                    BillingCity,
+                    BillingPostalCode,
+              Owner.FirstName,
+              Owner.LastName,
+              Owner.Brightree_Marketing_Rep_Id__c,
+                    BillingState,
+                    Description,
+                    BillingCountry,
+                    BillingAddress,
+                    ShippingAddress,
+                    ShippingStreet,
+                    ShippingCity,
+                    ShippingPostalCode,
+                    ShippingCountry,
+                    ShippingState,
+                    Brightree_Status__c,
+              CRMId__c,
+                    Sales_Channel__c,
+                    RecordType.Name,
+                    ContactRecordId__r.FirstName,
+                    ContactRecordId__r.LastName,
+                    ContactRecordId__r.MobilePhone,
+                    ContactRecordId__r.RecordTypeId,
+                    ContactRecordId__r.CRMId__c,
+                    ContactRecordId__r.Email,
+                    ContactRecordId__r.Phone,
+                    ContactRecordId__r.Date_of_Birth__c,
+                    ContactRecordId__r.Gender__c,
+                    Primary_Payor_Policy__c,
+                    Secondary_Payor_Policy__c,
+                    Tertiary_Payor_Policy__c,
+                    Primary_Policy_Number__c,
+                    Secondary_Policy_Number__c,
+                    Tertiary_Policy_Number__c,
+                    Primary_Payor_Policy__r.Brightree_Insurance_Id__c,
+                    Secondary_Payor_Policy__r.Brightree_Insurance_Id__c,
+                    Tertiary_Payor_Policy__r.Brightree_Insurance_Id__c,
+                    (SELECT
+                            Brightree_Opty_Id__c,
+                            RecordTypeId,
+                            RecordType.Name,
+                            CloseDate,
+                            Branch__c,
+                      Owner.FirstName,
+                      Owner.LastName,
+                            Owner.CRMId__c,
+                            AccountId,
+                            Brightree_Status__c,
+                            CRMId__c,
+                            Id,
+                            Cash_Payment_Types__c,
+                            RecordType.DeveloperName,
+                            Shipping_State_Code__c,
+                            Shipping_Street__c,
+                            Shipping_Postal_Code__c,
+                            Shipping_Method__c,
+                            Shipping_Country_Code__c,
+                            Shipping_City__c,
+                            Shipping_Notes__c,
+                            Sales_to_Insurance__c
+                    FROM
+                            Opportunities
+                    WHERE
+                            Id in :opportunitiesIds
+                    LIMIT
+                            1)
+            FROM
+                    Account
+            WHERE
+                    Id in (SELECT accountId FROM Opportunity WHERE Id in :opportunitiesIds)
+    ];
+
+    List<Sobject> q = (List<Sobject>) [
+            SELECT
+                    Brightree_Item_Id__c,
+                    OpportunityId,
+                    Product2Id,
+                    Quantity,
+                    Product2.Brightree_Item__c,
+                    Description,
+                    TotalPrice,
+                    UnitPrice
+            FROM
+                    OpportunityLineItem
+            WHERE
+                    OpportunityId in :opportunitiesIds
+    ];
+
+    Map<String, List<OpportunityLineItem>> items = (Map<String, List<OpportunityLineItem>>) AU_Batch.convertListToMapByString(q, 'OpportunityId');
+
+    for (Account account : accounts) {
+      // If an account is already synced to Brightree then skip the PatientCreate process
+      if (AU_Check.IsNullOrEmpty(account.Brightree_Account_Id__c)) {
+        try {
+          account.Brightree_Account_Id__c = createBTPatient(account);
+          account.Brightree_Status__c = 'Successful';
+          account.Brightree_Submitted_Date__c = datetime.now();
+          uow.registerDirty(account);
+        } catch (Exception ex) {
+          Map<String, Object> details = new Map<String, Object> ();
+          account.Brightree_Status__c = 'Error Occurred';
+          uow.registerDirty(account);
+          details.put('Account.Id', account.Id);
+          errors.add(new Error (CLASS_NAME + 'asyncCreateSaleOrder.createBTPatient', ex, details));
+        }
+      }
+
+      for (Opportunity opportunity : account.opportunities) {
+        if (!AU_Check.IsNullOrEmpty(account.Brightree_Account_Id__c)) {
+          try {
+            opportunity.Brightree_Opty_Id__c = string.valueOf(createBTSaleOrder(opportunity, account));
+            opportunity.Brightree_Status__c = 'Successful';
+            opportunity.Brightree_Submitted_Date__c = datetime.now();
+          } catch (Exception ex) {
+            Map<String, Object> details = new Map<String, Object>();
+            opportunity.Brightree_Status__c = 'Error Occurred';
+            details.put('Opportunity.Id', opportunity.Id);
+            details.put('Account.Id', account.Id);
+            details.put('Account.Brightree_Account_Id__c', account.Brightree_Account_Id__c);
+            errors.add(new Error(CLASS_NAME + 'asyncCreateSaleOrder.createBTSalesOrder', ex, details));
+          }
+
+          for (OpportunityLineItem item : items.get(opportunity.Id)) {
+            if (!AU_Check.isNullOrEmpty(item.Product2.Brightree_Item__c) && AU_Check.isNullOrEmpty(item.Brightree_Item_Id__c) && !AU_Check.isNullOrEmpty(opportunity.Brightree_Opty_Id__c)) {
+              try {
+                item.Brightree_Item_Id__c = string.valueOf(addItemToBTSaleOrder(opportunity, item, item.Product2));
+                item.Brightree_Submitted_Date__c = datetime.now();
+              } catch (Exception ex) {
+                AU_Debugger.Debug(CLASS_NAME + 'asyncCreateSaleOrder.addItemToBTSaleOrder: Syncronous cancellation of the BT order created, id = ' + opportunity.Brightree_Opty_Id__c);
+                cancelSaleOrder(opportunity.Brightree_Opty_Id__c);
+                opportunity.Brightree_Opty_Id__c = '';
+                opportunity.StageName = 'Ready for Order Entry';
+                opportunity.Brightree_Submitted_Date__c = datetime.now();
+                opportunity.Brightree_Status__c = 'Error Occurred';
+                Map<String, Object> details = new Map<String, Object>();
+                details.put('Opportunity.Id', opportunity.Id);
+                details.put('Opportunity.Brightree_Opty_Id__c', opportunity.Brightree_Opty_Id__c);
+                details.put('Account.Id', account.Id);
+                details.put('Account.Brightree_Account_Id__c', account.Brightree_Account_Id__c);
+                details.put('Product2.Brightree_Item__c', item.Product2.Brightree_Item__c);
+                errors.add(new Error(CLASS_NAME + 'asyncCreateSaleOrder.addItemToBTSaleOrder', ex, details));
+              }
+            }
+            uow.registerDirty(item);
+          }
+        } else {
+          Map<String, Object> details = new Map<String, Object>();
+          opportunity.Brightree_Status__c = 'Error Occurred';
+          details.put('Opportunity.Id', opportunity.Id);
+          details.put('Account.Id', account.Id);
+          details.put('Account.Brightree_Account_Id__c', account.Brightree_Account_Id__c);
+          errors.add(new Error(CLASS_NAME + 'asyncCreateSaleOrder.createBTSalesOrder', null, details));
+        }
+
+        uow.registerDirty(opportunity);
+      }
+    }
+
+    uow.commitWork();
+    for (Error error : errors) {
+      AU_Debugger.reportException(error.component, error.excep, error.extras);
+    }
+    AU_Debugger.leaveFunction();
+  }
+
+  public static Integer createBTSaleOrder (Opportunity opportunity, Account account) {
+    AU_Debugger.enterFunction(CLASS_NAME + 'createBTSaleOrder');
+    AU_Check.NotNull(opportunity, 'opportunity');
+
+    AU_Check.assert(!AU_Check.isNullOrEmpty(account.ContactRecordId__c), 'Account.ContactRecordId__c is NULL and the system attempted to create an Opportunity in Brightree.' + account.Id);
+    AU_Check.assert(!AU_Check.isNullOrEmpty(account.Brightree_Account_Id__c), 'Account.Brightree_Account_Id__c is NULL and the system attempted to create an Opportunity in Brightree.');
+    AU_Check.assert(account.Id == opportunity.AccountId, 'Account.Id and Opportunity.AccountId do not match.');
+    AU_Check.assert(AU_Check.isNullOrEmpty(opportunity.Brightree_Opty_Id__c), 'SaleOrder for this opportunify already exist in Brightree');
+
+    ABT_Services.CreateSaleOrderArgs saleOrderArgs = new ABT_Services.CreateSaleOrderArgs ();
+    saleOrderArgs.patientBrightreeId = integer.valueOf(account.Brightree_Account_Id__c);
+    saleOrderArgs.email = account.ContactRecordId__r.Email;
+    saleOrderArgs.phone = account.ContactRecordId__r.Phone;
+    saleOrderArgs.address = opportunity.Shipping_Street__c;
+    saleOrderArgs.city = opportunity.Shipping_City__c;
+    saleOrderArgs.country = opportunity.Shipping_Country_Code__c;
+    saleOrderArgs.postalCode = opportunity.Shipping_Postal_Code__c;
+    saleOrderArgs.state = opportunity.Shipping_State_Code__c;
+    saleOrderArgs.branchId = integer.valueOf(AU_ExternalSystemLookup.salesforceToExternalId('ABT','Branch', opportunity.Branch__c));
+    saleOrderArgs.deliveryNote = opportunity.Shipping_Notes__c;
+    saleOrderArgs.marketingRep = opportunity.Owner.LastName  + ', ' + opportunity.Owner.FirstName;
+
+    // Call Webservice
+    ABT_Services.SaleOrder saleOrderService = ABT_Factory.createSaleOrderService();
+    Integer brightreeId = saleOrderService.Create(saleOrderArgs);
+
+    ABT_Services.SaveCustomFieldSaleOrderArgs salesOrderCustomFields = new ABT_Services.SaveCustomFieldSaleOrderArgs ();
+    salesOrderCustomFields.opportunityId = string.valueOf(opportunity.CRMId__c);
+    salesOrderCustomFields.orderTypeId = getOrderType(opportunity);
+    salesOrderCustomFields.shippingmethod = AU_ExternalSystemLookup.salesforceToExternalId('ABT','Shipping Method', opportunity.Shipping_Method__c);
+    ABT_Factory.CreateCustomFieldService().SaveSaleOrderFieldsByBrightreeId(brightreeId, salesOrderCustomFields);
+
+    AU_Check.NotNull(brightreeId, 'brightreeId');
+    AU_Debugger.leaveFunction();
+    return brightreeId;
+  }
+
+  public static Integer addItemToBTSaleOrder (Opportunity opportunity, OpportunityLineItem item, Product2 product) {
+    AU_Debugger.enterFunction(CLASS_NAME + 'addItemToBTSaleOrder');
+    AU_Check.NotNull(opportunity, 'opportunity');
+    AU_Check.NotNull(opportunity.Brightree_Opty_Id__c, 'opportunity.Brightree_Opty_Id__c');
+    AU_Check.assert(opportunity.Id == item.OpportunityId, 'OpportunityLineItem not for this Opportunity');
+    AU_Check.assert(product.Id == item.Product2Id, 'OpportunityLineItem not for this Product');
+    AU_Check.NotNull(item, 'item');
+    AU_Check.NotNull(product, 'product');
+    AU_Check.NotNull(product.Brightree_Item__c, 'item.Brightree_Item__c');
+    AU_Check.assert(AU_Check.isNullOrEmpty(item.Brightree_Item_Id__c), 'Item for this OpportunityLineItem already exist');
+
+    ABT_Services.AddItemSaleOrderArgs args = new ABT_Services.AddItemSaleOrderArgs ();
+    args.brightreeId = integer.valueOf(opportunity.Brightree_Opty_Id__c);
+    args.item = product.Brightree_Item__c;
+    args.quantity = (Integer) item.Quantity;
+
+    Integer brightreeId = ABT_Factory.createSaleOrderService().addItem(args);
+    AU_Check.NotNull(brightreeId, 'brightreeId');
+    AU_Debugger.leaveFunction();
+    return brightreeId;
+  }
+
+  public static void cancelSaleOrder (String orderId) {
+    AU_Debugger.enterFunction(CLASS_NAME + 'cancelSaleOrder');
+    if (!AU_Check.isNullOrEmpty(orderId) && orderId != 'VOID') ABT_Factory.createSaleOrderService().cancel(integer.valueOf(orderId));
+    AU_Debugger.leaveFunction();
+  }
+
+  public static String createBTPatient (Account account) {
+    AU_Debugger.enterFunction(CLASS_NAME + 'createBTPatient');
+    String brightreePPayorId;
+    Boolean isPartner = (account.RecordTypeId == AU_RecordTypes.getInstance().getId('Account', 'Partner_Account_Record_Type') ? true : false);
+    AU_Debugger.debug(CLASS_NAME + 'createBTPatient: isPartner = ' + isPartner);
+    AU_Check.NotNull(account, 'account');
+    AU_Check.assert(AU_Check.isNullOrEmpty(account.Brightree_Account_Id__c), 'Patient for this account already exists');
+    ABT_Services.CreatePatientArgs patient = new ABT_Services.CreatePatientArgs ();
+
+    if (isPartner) {
+      patient.lastName = account.Name;
+      patient.phone = account.Phone;
+      patient.branchName = 'B2B';
+      patient.branchID = integer.valueOf(AU_ExternalSystemLookup.salesforceToExternalId('ABT','Branch', patient.branchName));
+    } else {
+      AU_Check.assert(!AU_Check.isNullOrEmpty(account.ContactRecordId__c), 'no contact info for this account');
+      patient.firstName = account.ContactRecordId__r.FirstName;
+      patient.lastName = account.ContactRecordId__r.LastName;
+      patient.birthdate = account.ContactRecordId__r.Date_of_Birth__c;
+      patient.email = account.ContactRecordId__r.Email;
+      patient.phone = account.ContactRecordId__r.Phone;
+      patient.mobile = account.ContactRecordId__r.MobilePhone;
+      patient.gender = account.ContactRecordId__r.Gender__c;
+      patient.branchName = account.Branch__c;
+    }
+
+    patient.marketingRepId = account.Owner.Brightree_Marketing_Rep_Id__c == null ? null : integer.valueOf(account.Owner.Brightree_Marketing_Rep_Id__c);
+    patient.accountNumber = account.CRMId__c;
+    patient.shipaddress = account.ShippingStreet;
+    patient.shipcity = account.ShippingCity;
+    patient.shipstate = account.ShippingState;
+    patient.shipcountry = account.ShippingCountry;
+    patient.shippostalCode = account.ShippingPostalCode;
+    patient.address = account.BillingStreet;
+    patient.city = account.BillingCity;
+    patient.state = account.BillingState;
+    patient.country = account.BillingCountry;
+    patient.postalCode = account.BillingPostalCode;
+    patient.branchID = integer.valueOf(AU_ExternalSystemLookup.salesforceToExternalId('ABT','Branch', patient.branchName));
+
+    String brightreeId = string.valueOf(ABT_Factory.CreatePatientService().Create(patient));
+
+    if (AU_Check.isNullOrEmpty(brightreeId)) throw new AU_Services.RemoteException ('INO_Managers_SaleOrder.createBTPatient: brightreeId should be set ');
+    if (!AU_CHeck.isNull(account.Primary_Payor_Policy__c))
+      brightreePPayorId = string.valueOf(ABT_Factory.CreatePatientService().addPayor(Integer.valueOf(brightreeId), Integer.valueOf(account.Primary_Payor_Policy__r.Brightree_Insurance_Id__c), 'Primary', account.Primary_Policy_Number__c));
+    if (!AU_CHeck.isNull(account.Secondary_Payor_Policy__c))
+      brightreePPayorId = string.valueOf(ABT_Factory.CreatePatientService().addPayor(Integer.valueOf(brightreeId), Integer.valueOf(account.Secondary_Payor_Policy__r.Brightree_Insurance_Id__c), 'Secondary', account.Secondary_Policy_Number__c));
+    if (!AU_CHeck.isNull(account.Tertiary_Payor_Policy__c))
+      brightreePPayorId = string.valueOf(ABT_Factory.CreatePatientService().addPayor(Integer.valueOf(brightreeId), Integer.valueOf(account.Tertiary_Payor_Policy__r.Brightree_Insurance_Id__c), 'Tertiary', account.Tertiary_Policy_Number__c));
+    ABT_Services.SaveCustomFieldPatientArgs patientCustomFields = new ABT_Services.SaveCustomFieldPatientArgs ();
+    patientCustomFields.accountId = account.CRMId__c;
+    patientCustomFields.channel = account.Sales_Channel__c;
+    ABT_Factory.CreateCustomFieldService().SavePatientFieldsByBrightreeId(integer.valueof(brightreeId), patientCustomFields);
+    AU_Debugger.leaveFunction();
+    return brightreeId;
+  }
+
+  private static String getOrderType(Opportunity o) {
+    String orderTypeKeyToLookUp = o.RecordType.DeveloperName;
+
+    if (o.RecordType.DeveloperName == 'Private_Insurance_Opportunity' && o.Sales_to_Insurance__c) {
+      orderTypeKeyToLookUp = 'Sales to Insurance';
+    }
+    return AU_ExternalSystemLookup.salesforceToExternalId('ABT','OrderType', orderTypeKeyToLookUp);
+  }
+
+  private class Error {
+    public Exception excep;
+    public Map<String, Object> extras;
+    public String component;
+    public Error (String comp, Exception ex, Map<String, Object> more) {
+      excep = ex;
+      extras = more;
+      component = comp;
+    }
+  }
+}
